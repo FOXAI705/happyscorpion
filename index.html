@@ -1183,8 +1183,98 @@ header:after{
 }
 </style>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style id="happy-v34-supabase-login">
+body.auth-locked header,
+body.auth-locked main,
+body.auth-locked .auditor-floating-widget{
+  display:none!important;
+}
+.hs-login-screen{
+  position:fixed;
+  inset:0;
+  z-index:999999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:radial-gradient(circle at top right,rgba(244,172,29,.16),transparent 22%),linear-gradient(180deg,#fbfcff 0%,#eef3fb 100%);
+}
+.hs-login-card{
+  width:min(390px,94vw);
+  background:#fff;
+  border-radius:28px;
+  padding:30px;
+  box-shadow:0 24px 70px rgba(15,23,42,.18);
+  border:1px solid rgba(255,255,255,.9);
+}
+.hs-login-brand{
+  display:inline-block;
+  padding:8px 12px;
+  border-radius:999px;
+  background:linear-gradient(135deg,#ffbb26,#ff8a1f);
+  color:#fff;
+  font-weight:900;
+  letter-spacing:.08em;
+  font-size:12px;
+  margin-bottom:12px;
+}
+.hs-login-card h2{
+  margin:0 0 8px;
+  color:#102247;
+  font-size:26px;
+}
+.hs-login-card p{
+  margin:0 0 20px;
+  color:#667085;
+  font-size:13px;
+}
+.hs-login-card label{
+  margin-top:12px;
+}
+.hs-login-card input{
+  margin-bottom:10px;
+}
+.hs-login-card button{
+  width:100%;
+  margin-top:8px;
+  padding:13px 14px;
+  border-radius:16px!important;
+  background:linear-gradient(135deg,#ffbb26,#ff8a1f)!important;
+  color:#fff!important;
+  font-weight:900;
+}
+#hsLoginError{
+  min-height:18px;
+  margin-top:12px;
+  color:#d92332;
+  font-size:13px;
+  font-weight:800;
+}
+#hsLogoutButton{
+  background:#fff1f2!important;
+  color:#d92332!important;
+}
+</style>
+
 </head>
-<body>
+<body class="auth-locked">
+
+<div id="hsLoginScreen" class="hs-login-screen">
+  <div class="hs-login-card">
+    <div class="hs-login-brand">HAPPYSCORPION</div>
+    <h2>Entrar na plataforma</h2>
+    <p>Use o email e password criados no Supabase.</p>
+    <label>Email</label>
+    <input id="hsLoginEmail" type="email" autocomplete="email" placeholder="email@exemplo.pt">
+    <label>Password</label>
+    <input id="hsLoginPassword" type="password" autocomplete="current-password" placeholder="Password">
+    <button id="hsLoginButton" type="button">ENTRAR</button>
+    <div id="hsLoginError"></div>
+  </div>
+</div>
+
 <header>
 <div class="wrap">
 <div class="logo"><div class="logo-block"><span>HAPPYSCORPION</span><small>GESTÃO DE OBRAS</small></div></div>
@@ -1235,6 +1325,7 @@ header:after{
         <button class="primary small" id="saveGlobalLayout" type="button">GUARDAR</button>
         <button class="light small" id="resetGlobalLayout" type="button">REPOR ORIGINAL</button>
         <button class="light small" id="showHiddenLayoutBoxes" type="button">MOSTRAR OCULTOS</button>
+        <button class="danger small" id="hsLogoutButton" type="button">SAIR</button>
       </div>
     </div>
   </div>
@@ -1497,7 +1588,7 @@ state.works=state.works.filter(w=>w.id!=='geral'&&w.title!=='Centro de custo ger
 state.movements=state.movements.map(m=>({type:m.type||'expense',docKind:m.docKind||'Fatura',workId:(m.workId==='geral'?'':(m.workId||m.costCenter||'')),documents:m.documents||makeLegacyDoc(m),...m}));
 function makeLegacyDoc(m){return m.fileData?[{id:crypto.randomUUID(),kind:m.docKind||'Fatura',number:m.number||'',date:m.date||'',name:m.fileName||'Documento',mime:m.fileMime||'',data:m.fileData||''}]:[]}
 const $=id=>document.getElementById(id);const money=v=>new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0}).format(Math.round(Number(v||0)));const num=v=>{let n=Number(String(v||'').replace(',','.'));return Number.isFinite(n)?n:0};const yearOf=d=>d?new Date(d).getFullYear():today.getFullYear();const monthOf=d=>d?new Date(d).getMonth():today.getMonth();
-function save(){localStorage.setItem('hs_movements',JSON.stringify(state.movements));localStorage.setItem('hs_income_cats',JSON.stringify(state.incomeCats));localStorage.setItem('hs_expense_cats',JSON.stringify(state.expenseCats));localStorage.setItem('hs_works',JSON.stringify(state.works));localStorage.setItem('hs_suppliers',JSON.stringify(state.suppliers||[]));localStorage.setItem('hs_clients',JSON.stringify(state.clients||[]));localStorage.setItem('hs_rental_contracts',JSON.stringify(state.rentalContracts||[]));localStorage.setItem('hs_anthropic_key',state.apiKey||'');}
+function save(){localStorage.setItem('hs_movements',JSON.stringify(state.movements));localStorage.setItem('hs_income_cats',JSON.stringify(state.incomeCats));localStorage.setItem('hs_expense_cats',JSON.stringify(state.expenseCats));localStorage.setItem('hs_works',JSON.stringify(state.works));localStorage.setItem('hs_suppliers',JSON.stringify(state.suppliers||[]));localStorage.setItem('hs_clients',JSON.stringify(state.clients||[]));localStorage.setItem('hs_rental_contracts',JSON.stringify(state.rentalContracts||[]));localStorage.setItem('hs_anthropic_key',state.apiKey||'');if(window.hsQueueCloudSave) window.hsQueueCloudSave();}
 function alphaSort(a,b){return String(a.name||a.title||'').localeCompare(String(b.name||b.title||''),'pt-PT',{sensitivity:'base'})}
 function sortedWorks(){return [...(state.works||[])].sort((a,b)=>String(a.title||'').localeCompare(String(b.title||''),'pt-PT',{sensitivity:'base'}))}
 function sortedIncomeCats(){return [...(state.incomeCats||[])].sort(alphaSort)}
@@ -2019,7 +2110,176 @@ function printDocumentList(){
 }
 </style>
 
-</head><body><h1>HAPPYSCORPION — Listagem de Documentos</h1><div class="meta">${MONTHS[state.month]} ${state.year}</div><table><thead><tr><th>Data</th><th>Número</th><th>Fornecedor</th><th>Obra</th><th>Categoria</th><th>Total com IVA</th><th>IVA</th><th>Data Pagamento</th><th>Valor do Pagamento</th><th>Banco</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`;
+</head><body><h1>HAPPYSCORPION — Listagem de Documentos</h1><div class="meta">${MONTHS[state.month]} ${state.year}</div><table><thead><tr><th>Data</th><th>Número</th><th>Fornecedor</th><th>Obra</th><th>Categoria</th><th>Total com IVA</th><th>IVA</th><th>Data Pagamento</th><th>Valor do Pagamento</th><th>Banco</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script>
+<script id="happy-v34-supabase-sync">
+(function(){
+  const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
+  const APP_ROW_ID = "happyscorpion";
+
+  if(!window.supabase){
+    console.error("Biblioteca Supabase não carregou.");
+    return;
+  }
+
+  const hsSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  window.hsSupabase = hsSupabase;
+
+  let cloudReady = false;
+  let savingTimer = null;
+  let loadingCloud = false;
+
+  function appStatePayload(){
+    return {
+      movements: state.movements || [],
+      incomeCats: state.incomeCats || [],
+      expenseCats: state.expenseCats || [],
+      works: state.works || [],
+      suppliers: state.suppliers || [],
+      clients: state.clients || [],
+      rentalContracts: state.rentalContracts || [],
+      year: state.year,
+      month: state.month,
+      clientInvoiceDoc: state.clientInvoiceDoc || null,
+      pendingDocs: state.pendingDocs || []
+    };
+  }
+
+  function applyAppState(data){
+    if(!data || typeof data !== "object") return;
+    if(Array.isArray(data.movements)) state.movements = data.movements;
+    if(Array.isArray(data.incomeCats)) state.incomeCats = data.incomeCats;
+    if(Array.isArray(data.expenseCats)) state.expenseCats = data.expenseCats;
+    if(Array.isArray(data.works)) state.works = data.works;
+    if(Array.isArray(data.suppliers)) state.suppliers = data.suppliers;
+    if(Array.isArray(data.clients)) state.clients = data.clients;
+    if(Array.isArray(data.rentalContracts)) state.rentalContracts = data.rentalContracts;
+    if(typeof data.year === "number") state.year = data.year;
+    if(typeof data.month === "number") state.month = data.month;
+    state.clientInvoiceDoc = data.clientInvoiceDoc || null;
+    state.pendingDocs = data.pendingDocs || [];
+  }
+
+  async function loadCloudData(){
+    loadingCloud = true;
+    const { data, error } = await hsSupabase
+      .from("app_data")
+      .select("data")
+      .eq("id", APP_ROW_ID)
+      .single();
+
+    loadingCloud = false;
+
+    if(error){
+      alert("Erro ao carregar dados do Supabase: " + error.message + "\nConfirme se a tabela app_data foi criada e se o RLS/policies estão ativos.");
+      return;
+    }
+
+    if(data && data.data && Object.keys(data.data).length){
+      applyAppState(data.data);
+      if(typeof save === "function") {
+        const oldReady = cloudReady;
+        cloudReady = false;
+        save();
+        cloudReady = oldReady;
+      }
+      if(typeof syncYears === "function") syncYears();
+      if(typeof renderAll === "function") renderAll();
+    }else{
+      await saveCloudData(true);
+    }
+  }
+
+  async function saveCloudData(force){
+    if((!cloudReady && !force) || loadingCloud) return;
+    const payload = appStatePayload();
+
+    const { error } = await hsSupabase
+      .from("app_data")
+      .upsert({
+        id: APP_ROW_ID,
+        data: payload,
+        updated_at: new Date().toISOString()
+      });
+
+    if(error){
+      console.error("Erro ao guardar no Supabase:", error.message);
+    }
+  }
+
+  window.hsQueueCloudSave = function(){
+    if(!cloudReady) return;
+    clearTimeout(savingTimer);
+    savingTimer = setTimeout(()=>saveCloudData(false), 650);
+  };
+
+  async function showAppAfterLogin(){
+    document.body.classList.remove("auth-locked");
+    const login = document.getElementById("hsLoginScreen");
+    if(login) login.style.display = "none";
+    cloudReady = true;
+    await loadCloudData();
+  }
+
+  async function login(){
+    const email = document.getElementById("hsLoginEmail").value.trim();
+    const password = document.getElementById("hsLoginPassword").value;
+    const err = document.getElementById("hsLoginError");
+    const btn = document.getElementById("hsLoginButton");
+
+    err.textContent = "";
+    if(!email || !password){
+      err.textContent = "Introduza email e password.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "A ENTRAR...";
+
+    const { error } = await hsSupabase.auth.signInWithPassword({ email, password });
+
+    btn.disabled = false;
+    btn.textContent = "ENTRAR";
+
+    if(error){
+      err.textContent = "Email ou password incorretos.";
+      return;
+    }
+
+    await showAppAfterLogin();
+  }
+
+  async function logout(){
+    await hsSupabase.auth.signOut();
+    location.reload();
+  }
+
+  async function checkSession(){
+    const { data } = await hsSupabase.auth.getSession();
+    if(data && data.session){
+      await showAppAfterLogin();
+    }else{
+      document.body.classList.add("auth-locked");
+      const login = document.getElementById("hsLoginScreen");
+      if(login) login.style.display = "flex";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    const loginBtn = document.getElementById("hsLoginButton");
+    const logoutBtn = document.getElementById("hsLogoutButton");
+    const password = document.getElementById("hsLoginPassword");
+
+    if(loginBtn) loginBtn.addEventListener("click", login);
+    if(logoutBtn) logoutBtn.addEventListener("click", logout);
+    if(password) password.addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
+
+    checkSession();
+  });
+})();
+</script>
+
+</body></html>`;
   const win=window.open('','_blank');
   if(win){win.document.open();win.document.write(html);win.document.close()}else alert('O navegador bloqueou a janela de impressão.');
 }
