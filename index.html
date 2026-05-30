@@ -1270,7 +1270,7 @@ body.auth-locked .auditor-floating-widget{
     <input id="hsLoginEmail" type="email" autocomplete="email" placeholder="email@exemplo.pt">
     <label>Password</label>
     <input id="hsLoginPassword" type="password" autocomplete="current-password" placeholder="Password">
-    <button id="hsLoginButton" type="button">ENTRAR</button>
+    <button id="hsLoginButton" type="button" onclick="window.hsLogin && window.hsLogin()">ENTRAR</button>
     <div id="hsLoginError"></div>
   </div>
 </div>
@@ -1325,7 +1325,7 @@ body.auth-locked .auditor-floating-widget{
         <button class="primary small" id="saveGlobalLayout" type="button">GUARDAR</button>
         <button class="light small" id="resetGlobalLayout" type="button">REPOR ORIGINAL</button>
         <button class="light small" id="showHiddenLayoutBoxes" type="button">MOSTRAR OCULTOS</button>
-        <button class="danger small" id="hsLogoutButton" type="button">SAIR</button>
+        <button class="danger small" id="hsLogoutButton" type="button" onclick="window.hsLogout && window.hsLogout()">SAIR</button>
       </div>
     </div>
   </div>
@@ -2111,23 +2111,40 @@ function printDocumentList(){
 </style>
 
 </head><body><h1>HAPPYSCORPION — Listagem de Documentos</h1><div class="meta">${MONTHS[state.month]} ${state.year}</div><table><thead><tr><th>Data</th><th>Número</th><th>Fornecedor</th><th>Obra</th><th>Categoria</th><th>Total com IVA</th><th>IVA</th><th>Data Pagamento</th><th>Valor do Pagamento</th><th>Banco</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script>
-<script id="happy-v34-supabase-sync">
+
+<script id="happy-v35-supabase-sync">
 (function(){
   const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
   const APP_ROW_ID = "happyscorpion";
 
-  if(!window.supabase){
-    console.error("Biblioteca Supabase não carregou.");
-    return;
-  }
-
-  const hsSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  window.hsSupabase = hsSupabase;
-
+  let hsSupabase = null;
   let cloudReady = false;
   let savingTimer = null;
   let loadingCloud = false;
+
+  function showLoginError(message){
+    const err = document.getElementById("hsLoginError");
+    if(err) err.textContent = message || "";
+  }
+
+  function setLoginButtonLoading(isLoading){
+    const btn = document.getElementById("hsLoginButton");
+    if(!btn) return;
+    btn.disabled = !!isLoading;
+    btn.textContent = isLoading ? "A ENTRAR..." : "ENTRAR";
+  }
+
+  function getClient(){
+    if(hsSupabase) return hsSupabase;
+    if(!window.supabase){
+      showLoginError("Erro: a biblioteca Supabase não carregou. Recarregue a página.");
+      return null;
+    }
+    hsSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.hsSupabase = hsSupabase;
+    return hsSupabase;
+  }
 
   function appStatePayload(){
     return {
@@ -2160,50 +2177,51 @@ function printDocumentList(){
     state.pendingDocs = data.pendingDocs || [];
   }
 
-  async function loadCloudData(){
-    loadingCloud = true;
-    const { data, error } = await hsSupabase
-      .from("app_data")
-      .select("data")
-      .eq("id", APP_ROW_ID)
-      .single();
-
-    loadingCloud = false;
-
-    if(error){
-      alert("Erro ao carregar dados do Supabase: " + error.message + "\nConfirme se a tabela app_data foi criada e se o RLS/policies estão ativos.");
-      return;
-    }
-
-    if(data && data.data && Object.keys(data.data).length){
-      applyAppState(data.data);
-      if(typeof save === "function") {
-        const oldReady = cloudReady;
-        cloudReady = false;
-        save();
-        cloudReady = oldReady;
-      }
-      if(typeof syncYears === "function") syncYears();
-      if(typeof renderAll === "function") renderAll();
-    }else{
-      await saveCloudData(true);
-    }
-  }
-
   async function saveCloudData(force){
     if((!cloudReady && !force) || loadingCloud) return;
-    const payload = appStatePayload();
+    const client = getClient();
+    if(!client) return;
 
-    const { error } = await hsSupabase
+    const { error } = await client
       .from("app_data")
       .upsert({
         id: APP_ROW_ID,
-        data: payload,
+        data: appStatePayload(),
         updated_at: new Date().toISOString()
       });
 
     if(error){
       console.error("Erro ao guardar no Supabase:", error.message);
+      showLoginError("Entrou, mas houve erro ao guardar/carregar dados: " + error.message);
+    }
+  }
+
+  async function loadCloudData(){
+    const client = getClient();
+    if(!client) return;
+
+    loadingCloud = true;
+
+    const { data, error } = await client
+      .from("app_data")
+      .select("data")
+      .eq("id", APP_ROW_ID)
+      .maybeSingle();
+
+    loadingCloud = false;
+
+    if(error){
+      showLoginError("Login feito, mas erro na tabela app_data: " + error.message);
+      alert("Login feito, mas existe erro na tabela app_data. Confirme se executou o SQL no Supabase.");
+      return;
+    }
+
+    if(data && data.data && Object.keys(data.data).length){
+      applyAppState(data.data);
+      if(typeof syncYears === "function") syncYears();
+      if(typeof renderAll === "function") renderAll();
+    } else {
+      await saveCloudData(true);
     }
   }
 
@@ -2218,66 +2236,99 @@ function printDocumentList(){
     const login = document.getElementById("hsLoginScreen");
     if(login) login.style.display = "none";
     cloudReady = true;
+    showLoginError("");
     await loadCloudData();
   }
 
-  async function login(){
-    const email = document.getElementById("hsLoginEmail").value.trim();
-    const password = document.getElementById("hsLoginPassword").value;
-    const err = document.getElementById("hsLoginError");
-    const btn = document.getElementById("hsLoginButton");
+  window.hsLogin = async function(){
+    const client = getClient();
+    if(!client) return;
 
-    err.textContent = "";
+    const email = (document.getElementById("hsLoginEmail")?.value || "").trim();
+    const password = document.getElementById("hsLoginPassword")?.value || "";
+
+    showLoginError("");
+
     if(!email || !password){
-      err.textContent = "Introduza email e password.";
+      showLoginError("Introduza email e password.");
       return;
     }
 
-    btn.disabled = true;
-    btn.textContent = "A ENTRAR...";
+    setLoginButtonLoading(true);
 
-    const { error } = await hsSupabase.auth.signInWithPassword({ email, password });
-
-    btn.disabled = false;
-    btn.textContent = "ENTRAR";
-
-    if(error){
-      err.textContent = "Email ou password incorretos.";
-      return;
+    try {
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if(error){
+        showLoginError("Erro no login: " + error.message);
+        return;
+      }
+      if(!data || !data.session){
+        showLoginError("Login não concluído. Confirme o utilizador no Supabase.");
+        return;
+      }
+      await showAppAfterLogin();
+    } catch(e) {
+      showLoginError("Erro inesperado: " + (e && e.message ? e.message : e));
+    } finally {
+      setLoginButtonLoading(false);
     }
+  };
 
-    await showAppAfterLogin();
-  }
-
-  async function logout(){
-    await hsSupabase.auth.signOut();
+  window.hsLogout = async function(){
+    const client = getClient();
+    if(client) await client.auth.signOut();
     location.reload();
-  }
+  };
 
   async function checkSession(){
-    const { data } = await hsSupabase.auth.getSession();
-    if(data && data.session){
-      await showAppAfterLogin();
-    }else{
-      document.body.classList.add("auth-locked");
-      const login = document.getElementById("hsLoginScreen");
-      if(login) login.style.display = "flex";
+    const client = getClient();
+    if(!client) return;
+
+    try {
+      const { data } = await client.auth.getSession();
+      if(data && data.session){
+        await showAppAfterLogin();
+      } else {
+        document.body.classList.add("auth-locked");
+        const login = document.getElementById("hsLoginScreen");
+        if(login) login.style.display = "flex";
+      }
+    } catch(e) {
+      showLoginError("Erro ao verificar sessão: " + (e && e.message ? e.message : e));
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function(){
-    const loginBtn = document.getElementById("hsLoginButton");
-    const logoutBtn = document.getElementById("hsLogoutButton");
+  function initAuth(){
+    const btn = document.getElementById("hsLoginButton");
+    const logout = document.getElementById("hsLogoutButton");
     const password = document.getElementById("hsLoginPassword");
 
-    if(loginBtn) loginBtn.addEventListener("click", login);
-    if(logoutBtn) logoutBtn.addEventListener("click", logout);
-    if(password) password.addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
+    if(btn && !btn.dataset.authBound){
+      btn.dataset.authBound = "1";
+      btn.addEventListener("click", window.hsLogin);
+    }
+    if(logout && !logout.dataset.authBound){
+      logout.dataset.authBound = "1";
+      logout.addEventListener("click", window.hsLogout);
+    }
+    if(password && !password.dataset.authBound){
+      password.dataset.authBound = "1";
+      password.addEventListener("keydown", e => {
+        if(e.key === "Enter") window.hsLogin();
+      });
+    }
 
     checkSession();
-  });
+  }
+
+  if(document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAuth);
+  } else {
+    initAuth();
+  }
 })();
 </script>
+
 
 </body></html>`;
   const win=window.open('','_blank');
