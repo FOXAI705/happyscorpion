@@ -1184,7 +1184,7 @@ header:after{
 </style>
 
 
-<style id="happy-v34-supabase-login">
+<style id="happy-v38-login-fix">
 body.auth-locked header,
 body.auth-locked main,
 body.auth-locked .auditor-floating-widget{
@@ -1270,7 +1270,8 @@ body.auth-locked .auditor-floating-widget{
     <label>Password</label>
     <input id="hsLoginPassword" type="password" autocomplete="current-password" placeholder="Password">
     <button id="hsLoginButton" type="button" onclick="window.hsLoginDebug(event)">ENTRAR</button>
-    <div id="hsLoginError"></div><div id="hsLoginStatus" style="font-size:12px;color:#667085;margin-top:8px;font-weight:700;"></div>
+    <div id="hsLoginError"></div>
+    <div id="hsLoginStatus" style="font-size:12px;color:#667085;margin-top:8px;font-weight:700;"></div>
   </div>
 </div>
 
@@ -2109,370 +2110,7 @@ function printDocumentList(){
 }
 </style>
 
-</head><body><h1>HAPPYSCORPION — Listagem de Documentos</h1><div class="meta">${MONTHS[state.month]} ${state.year}</div><table><thead><tr><th>Data</th><th>Número</th><th>Fornecedor</th><th>Obra</th><th>Categoria</th><th>Total com IVA</th><th>IVA</th><th>Data Pagamento</th><th>Valor do Pagamento</th><th>Banco</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script>
-
-<script id="happy-v36-supabase-fetch-sync">
-(function(){
-  const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
-  const APP_ROW_ID = "happyscorpion";
-
-  let accessToken = localStorage.getItem("hs_supabase_access_token") || "";
-  let refreshToken = localStorage.getItem("hs_supabase_refresh_token") || "";
-  let cloudReady = false;
-  let savingTimer = null;
-  let loadingCloud = false;
-
-  function showLoginError(message){
-    const err = document.getElementById("hsLoginError");
-    if(err) err.textContent = message || "";
-  }
-
-  function setLoginButtonLoading(isLoading){
-    const btn = document.getElementById("hsLoginButton");
-    if(!btn) return;
-    btn.disabled = !!isLoading;
-    btn.textContent = isLoading ? "A ENTRAR..." : "ENTRAR";
-  }
-
-  async function apiFetch(path, options){
-    options = options || {};
-    const headers = Object.assign({
-      "apikey": SUPABASE_KEY,
-      "Content-Type": "application/json"
-    }, options.headers || {});
-    if(accessToken) headers["Authorization"] = "Bearer " + accessToken;
-
-    const response = await fetch(SUPABASE_URL + path, {
-      method: options.method || "GET",
-      headers: headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
-    });
-
-    const text = await response.text();
-    let body = null;
-    try { body = text ? JSON.parse(text) : null; } catch(e) { body = text; }
-
-    if(!response.ok){
-      const msg = (body && (body.msg || body.message || body.error_description || body.error)) || text || ("HTTP " + response.status);
-      throw new Error(msg);
-    }
-    return body;
-  }
-
-  function appStatePayload(){
-    return {
-      movements: state.movements || [],
-      incomeCats: state.incomeCats || [],
-      expenseCats: state.expenseCats || [],
-      works: state.works || [],
-      suppliers: state.suppliers || [],
-      clients: state.clients || [],
-      rentalContracts: state.rentalContracts || [],
-      year: state.year,
-      month: state.month,
-      clientInvoiceDoc: state.clientInvoiceDoc || null,
-      pendingDocs: state.pendingDocs || []
-    };
-  }
-
-  function applyAppState(data){
-    if(!data || typeof data !== "object") return;
-    if(Array.isArray(data.movements)) state.movements = data.movements;
-    if(Array.isArray(data.incomeCats)) state.incomeCats = data.incomeCats;
-    if(Array.isArray(data.expenseCats)) state.expenseCats = data.expenseCats;
-    if(Array.isArray(data.works)) state.works = data.works;
-    if(Array.isArray(data.suppliers)) state.suppliers = data.suppliers;
-    if(Array.isArray(data.clients)) state.clients = data.clients;
-    if(Array.isArray(data.rentalContracts)) state.rentalContracts = data.rentalContracts;
-    if(typeof data.year === "number") state.year = data.year;
-    if(typeof data.month === "number") state.month = data.month;
-    state.clientInvoiceDoc = data.clientInvoiceDoc || null;
-    state.pendingDocs = data.pendingDocs || [];
-  }
-
-  async function loadCloudData(){
-    if(!accessToken) return;
-    loadingCloud = true;
-    try {
-      const rows = await apiFetch("/rest/v1/app_data?id=eq." + encodeURIComponent(APP_ROW_ID) + "&select=data");
-      const row = Array.isArray(rows) ? rows[0] : null;
-      if(row && row.data && Object.keys(row.data).length){
-        applyAppState(row.data);
-        if(typeof syncYears === "function") syncYears();
-        if(typeof renderAll === "function") renderAll();
-      } else {
-        await saveCloudData(true);
-      }
-    } catch(error) {
-      alert("Login feito, mas existe erro na tabela app_data: " + error.message + "\nConfirme se executou o SQL no Supabase.");
-      showLoginError("Erro na tabela app_data: " + error.message);
-    } finally {
-      loadingCloud = false;
-    }
-  }
-
-  async function saveCloudData(force){
-    if((!cloudReady && !force) || loadingCloud || !accessToken) return;
-    try {
-      await apiFetch("/rest/v1/app_data", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: {
-          id: APP_ROW_ID,
-          data: appStatePayload(),
-          updated_at: new Date().toISOString()
-        }
-      });
-    } catch(error) {
-      console.error("Erro ao guardar no Supabase:", error.message);
-      showLoginError("Erro ao guardar dados: " + error.message);
-    }
-  }
-
-  window.hsQueueCloudSave = function(){
-    if(!cloudReady) return;
-    clearTimeout(savingTimer);
-    savingTimer = setTimeout(function(){ saveCloudData(false); }, 650);
-  };
-
-  async function showAppAfterLogin(){
-    document.body.classList.remove("auth-locked");
-    const login = document.getElementById("hsLoginScreen");
-    if(login) login.style.display = "none";
-    cloudReady = true;
-    showLoginError("");
-    await loadCloudData();
-  }
-
-  window.hsLogin = async function(){
-    const email = (document.getElementById("hsLoginEmail")?.value || "").trim();
-    const password = document.getElementById("hsLoginPassword")?.value || "";
-    showLoginError("");
-
-    if(!email || !password){
-      showLoginError("Introduza email e password.");
-      return;
-    }
-
-    setLoginButtonLoading(true);
-    try {
-      const auth = await apiFetch("/auth/v1/token?grant_type=password", {
-        method: "POST",
-        body: { email: email, password: password }
-      });
-
-      if(!auth || !auth.access_token){
-        showLoginError("Login não concluído. Confirme o utilizador no Supabase.");
-        return;
-      }
-
-      accessToken = auth.access_token;
-      refreshToken = auth.refresh_token || "";
-      localStorage.setItem("hs_supabase_access_token", accessToken);
-      localStorage.setItem("hs_supabase_refresh_token", refreshToken);
-
-      await showAppAfterLogin();
-    } catch(error) {
-      showLoginError("Erro no login: " + error.message);
-    } finally {
-      setLoginButtonLoading(false);
-    }
-  };
-
-  window.hsLogout = function(){
-    localStorage.removeItem("hs_supabase_access_token");
-    localStorage.removeItem("hs_supabase_refresh_token");
-    location.reload();
-  };
-
-  async function checkSession(){
-    if(accessToken){
-      await showAppAfterLogin();
-    } else {
-      document.body.classList.add("auth-locked");
-      const login = document.getElementById("hsLoginScreen");
-      if(login) login.style.display = "flex";
-    }
-  }
-
-  function initAuth(){
-    const password = document.getElementById("hsLoginPassword");
-    if(password && !password.dataset.authBound){
-      password.dataset.authBound = "1";
-      password.addEventListener("keydown", function(e){
-        if(e.key === "Enter") window.hsLogin();
-      });
-    }
-    checkSession();
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", initAuth);
-  } else {
-    initAuth();
-  }
-})();
-</script>
-
-
-
-<script id="happy-v37-login-diagnostico">
-(function(){
-  const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
-  const APP_ROW_ID = "happyscorpion";
-
-  function status(msg, isError){
-    const s = document.getElementById("hsLoginStatus");
-    const e = document.getElementById("hsLoginError");
-    if(s) {
-      s.textContent = msg || "";
-      s.style.color = isError ? "#d92332" : "#667085";
-    }
-    if(e && isError) e.textContent = msg || "";
-    if(e && !isError) e.textContent = "";
-  }
-
-  async function request(path, options){
-    options = options || {};
-    const headers = Object.assign({
-      "apikey": SUPABASE_KEY,
-      "Content-Type": "application/json"
-    }, options.headers || {});
-    if(options.token) headers["Authorization"] = "Bearer " + options.token;
-
-    const res = await fetch(SUPABASE_URL + path, {
-      method: options.method || "GET",
-      headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
-    });
-
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-
-    if(!res.ok){
-      const msg = data && (data.message || data.msg || data.error_description || data.error)
-        ? (data.message || data.msg || data.error_description || data.error)
-        : (text || ("HTTP " + res.status));
-      throw new Error(msg);
-    }
-    return data;
-  }
-
-  function payload(){
-    return {
-      movements: window.state?.movements || [],
-      incomeCats: window.state?.incomeCats || [],
-      expenseCats: window.state?.expenseCats || [],
-      works: window.state?.works || [],
-      suppliers: window.state?.suppliers || [],
-      clients: window.state?.clients || [],
-      rentalContracts: window.state?.rentalContracts || [],
-      year: window.state?.year,
-      month: window.state?.month
-    };
-  }
-
-  async function loadSharedData(token){
-    status("Login aceite. A carregar dados partilhados...");
-    try {
-      const rows = await request("/rest/v1/app_data?id=eq." + encodeURIComponent(APP_ROW_ID) + "&select=data", { token });
-      const row = Array.isArray(rows) ? rows[0] : null;
-
-      if(row && row.data && window.state){
-        const d = row.data;
-        if(Array.isArray(d.movements)) state.movements = d.movements;
-        if(Array.isArray(d.incomeCats)) state.incomeCats = d.incomeCats;
-        if(Array.isArray(d.expenseCats)) state.expenseCats = d.expenseCats;
-        if(Array.isArray(d.works)) state.works = d.works;
-        if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers;
-        if(Array.isArray(d.clients)) state.clients = d.clients;
-        if(Array.isArray(d.rentalContracts)) state.rentalContracts = d.rentalContracts;
-      } else {
-        await request("/rest/v1/app_data", {
-          method: "POST",
-          token,
-          headers: { "Prefer": "resolution=merge-duplicates" },
-          body: { id: APP_ROW_ID, data: payload(), updated_at: new Date().toISOString() }
-        });
-      }
-
-      document.body.classList.remove("auth-locked");
-      const login = document.getElementById("hsLoginScreen");
-      if(login) login.style.display = "none";
-
-      if(typeof syncYears === "function") syncYears();
-      if(typeof renderAll === "function") renderAll();
-
-      status("");
-    } catch(err){
-      status("Login feito, mas falta configurar a tabela app_data: " + err.message, true);
-      alert("Login feito, mas falta configurar a tabela app_data no Supabase. Erro: " + err.message);
-    }
-  }
-
-  window.hsLoginDebug = async function(ev){
-    if(ev && ev.preventDefault) ev.preventDefault();
-
-    const btn = document.getElementById("hsLoginButton");
-    const email = (document.getElementById("hsLoginEmail")?.value || "").trim();
-    const password = document.getElementById("hsLoginPassword")?.value || "";
-
-    if(!email || !password){
-      status("Introduza email e password.", true);
-      return false;
-    }
-
-    try {
-      if(btn) {
-        btn.disabled = true;
-        btn.textContent = "A VALIDAR...";
-      }
-
-      status("A contactar o Supabase...");
-      const auth = await request("/auth/v1/token?grant_type=password", {
-        method: "POST",
-        body: { email, password }
-      });
-
-      if(!auth || !auth.access_token){
-        status("O Supabase respondeu, mas não devolveu sessão.", true);
-        return false;
-      }
-
-      localStorage.setItem("hs_supabase_access_token", auth.access_token);
-      localStorage.setItem("hs_supabase_refresh_token", auth.refresh_token || "");
-
-      await loadSharedData(auth.access_token);
-      return false;
-    } catch(err){
-      status("Erro no login: " + err.message, true);
-      return false;
-    } finally {
-      if(btn) {
-        btn.disabled = false;
-        btn.textContent = "ENTRAR";
-      }
-    }
-  };
-
-  window.hsLogout = function(){
-    localStorage.removeItem("hs_supabase_access_token");
-    localStorage.removeItem("hs_supabase_refresh_token");
-    location.reload();
-  };
-
-  document.addEventListener("DOMContentLoaded", function(){
-    status("Pronto para login.");
-    const p = document.getElementById("hsLoginPassword");
-    if(p) p.addEventListener("keydown", function(e){ if(e.key === "Enter") window.hsLoginDebug(e); });
-  });
-})();
-</script>
-
-</body></html>`;
+</head><body><h1>HAPPYSCORPION — Listagem de Documentos</h1><div class="meta">${MONTHS[state.month]} ${state.year}</div><table><thead><tr><th>Data</th><th>Número</th><th>Fornecedor</th><th>Obra</th><th>Categoria</th><th>Total com IVA</th><th>IVA</th><th>Data Pagamento</th><th>Valor do Pagamento</th><th>Banco</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`;
   const win=window.open('','_blank');
   if(win){win.document.open();win.document.write(html);win.document.close()}else alert('O navegador bloqueou a janela de impressão.');
 }
@@ -3424,5 +3062,220 @@ init();
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
-</script></body>
+</script>
+<script id="happy-v38-supabase-fetch-sync">
+(function(){
+  const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
+  const APP_ROW_ID = "happyscorpion";
+
+  let accessToken = localStorage.getItem("hs_supabase_access_token") || "";
+  let refreshToken = localStorage.getItem("hs_supabase_refresh_token") || "";
+  let cloudReady = false;
+  let savingTimer = null;
+  let loadingCloud = false;
+
+  function status(msg, isError){
+    const s = document.getElementById("hsLoginStatus");
+    const e = document.getElementById("hsLoginError");
+    if(s) {
+      s.textContent = msg || "";
+      s.style.color = isError ? "#d92332" : "#667085";
+    }
+    if(e && isError) e.textContent = msg || "";
+    if(e && !isError) e.textContent = "";
+  }
+
+  function setLoginButtonLoading(isLoading){
+    const btn = document.getElementById("hsLoginButton");
+    if(!btn) return;
+    btn.disabled = !!isLoading;
+    btn.textContent = isLoading ? "A ENTRAR..." : "ENTRAR";
+  }
+
+  async function apiFetch(path, options){
+    options = options || {};
+    const headers = Object.assign({
+      "apikey": SUPABASE_KEY,
+      "Content-Type": "application/json"
+    }, options.headers || {});
+    if(accessToken) headers["Authorization"] = "Bearer " + accessToken;
+
+    const response = await fetch(SUPABASE_URL + path, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+
+    const text = await response.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch(e) { body = text; }
+
+    if(!response.ok){
+      const msg = (body && (body.msg || body.message || body.error_description || body.error)) || text || ("HTTP " + response.status);
+      throw new Error(msg);
+    }
+    return body;
+  }
+
+  function appStatePayload(){
+    return {
+      movements: state.movements || [],
+      incomeCats: state.incomeCats || [],
+      expenseCats: state.expenseCats || [],
+      works: state.works || [],
+      suppliers: state.suppliers || [],
+      clients: state.clients || [],
+      rentalContracts: state.rentalContracts || [],
+      year: state.year,
+      month: state.month,
+      clientInvoiceDoc: state.clientInvoiceDoc || null,
+      pendingDocs: state.pendingDocs || []
+    };
+  }
+
+  function applyAppState(data){
+    if(!data || typeof data !== "object") return;
+    if(Array.isArray(data.movements)) state.movements = data.movements;
+    if(Array.isArray(data.incomeCats)) state.incomeCats = data.incomeCats;
+    if(Array.isArray(data.expenseCats)) state.expenseCats = data.expenseCats;
+    if(Array.isArray(data.works)) state.works = data.works;
+    if(Array.isArray(data.suppliers)) state.suppliers = data.suppliers;
+    if(Array.isArray(data.clients)) state.clients = data.clients;
+    if(Array.isArray(data.rentalContracts)) state.rentalContracts = data.rentalContracts;
+    if(typeof data.year === "number") state.year = data.year;
+    if(typeof data.month === "number") state.month = data.month;
+    state.clientInvoiceDoc = data.clientInvoiceDoc || null;
+    state.pendingDocs = data.pendingDocs || [];
+  }
+
+  async function saveCloudData(force){
+    if((!cloudReady && !force) || loadingCloud || !accessToken) return;
+    try {
+      await apiFetch("/rest/v1/app_data", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: {
+          id: APP_ROW_ID,
+          data: appStatePayload(),
+          updated_at: new Date().toISOString()
+        }
+      });
+    } catch(error) {
+      console.error("Erro ao guardar no Supabase:", error.message);
+      status("Erro ao guardar dados: " + error.message, true);
+    }
+  }
+
+  async function loadCloudData(){
+    if(!accessToken) return;
+    loadingCloud = true;
+    try {
+      const rows = await apiFetch("/rest/v1/app_data?id=eq." + encodeURIComponent(APP_ROW_ID) + "&select=data");
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if(row && row.data && Object.keys(row.data).length){
+        applyAppState(row.data);
+        if(typeof syncYears === "function") syncYears();
+        if(typeof renderAll === "function") renderAll();
+      } else {
+        await saveCloudData(true);
+      }
+    } catch(error) {
+      alert("Login feito, mas existe erro na tabela app_data: " + error.message + "\nConfirme se executou o SQL no Supabase.");
+      status("Erro na tabela app_data: " + error.message, true);
+    } finally {
+      loadingCloud = false;
+    }
+  }
+
+  window.hsQueueCloudSave = function(){
+    if(!cloudReady) return;
+    clearTimeout(savingTimer);
+    savingTimer = setTimeout(function(){ saveCloudData(false); }, 650);
+  };
+
+  async function showAppAfterLogin(){
+    document.body.classList.remove("auth-locked");
+    const login = document.getElementById("hsLoginScreen");
+    if(login) login.style.display = "none";
+    cloudReady = true;
+    status("");
+    await loadCloudData();
+  }
+
+  window.hsLoginDebug = async function(ev){
+    if(ev && ev.preventDefault) ev.preventDefault();
+
+    const email = (document.getElementById("hsLoginEmail")?.value || "").trim();
+    const password = document.getElementById("hsLoginPassword")?.value || "";
+
+    if(!email || !password){
+      status("Introduza email e password.", true);
+      return false;
+    }
+
+    setLoginButtonLoading(true);
+    try {
+      status("A contactar o Supabase...");
+      const auth = await apiFetch("/auth/v1/token?grant_type=password", {
+        method: "POST",
+        body: { email: email, password: password }
+      });
+
+      if(!auth || !auth.access_token){
+        status("Login não concluído. Confirme o utilizador no Supabase.", true);
+        return false;
+      }
+
+      accessToken = auth.access_token;
+      refreshToken = auth.refresh_token || "";
+      localStorage.setItem("hs_supabase_access_token", accessToken);
+      localStorage.setItem("hs_supabase_refresh_token", refreshToken);
+
+      status("Login aceite. A carregar dados partilhados...");
+      await showAppAfterLogin();
+      return false;
+    } catch(error) {
+      status("Erro no login: " + error.message, true);
+      return false;
+    } finally {
+      setLoginButtonLoading(false);
+    }
+  };
+
+  window.hsLogout = function(){
+    localStorage.removeItem("hs_supabase_access_token");
+    localStorage.removeItem("hs_supabase_refresh_token");
+    location.reload();
+  };
+
+  async function checkSession(){
+    if(accessToken){
+      await showAppAfterLogin();
+    } else {
+      document.body.classList.add("auth-locked");
+      const login = document.getElementById("hsLoginScreen");
+      if(login) login.style.display = "flex";
+      status("Pronto para login.");
+    }
+  }
+
+  function initAuth(){
+    const p = document.getElementById("hsLoginPassword");
+    if(p && !p.dataset.authBound){
+      p.dataset.authBound = "1";
+      p.addEventListener("keydown", function(e){ if(e.key === "Enter") window.hsLoginDebug(e); });
+    }
+    checkSession();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initAuth);
+  } else {
+    initAuth();
+  }
+})();
+</script>
+
+</body>
 </html>
