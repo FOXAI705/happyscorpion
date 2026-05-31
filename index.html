@@ -1269,8 +1269,8 @@ body.auth-locked .auditor-floating-widget{
     <input id="hsLoginEmail" type="email" autocomplete="email" placeholder="email@exemplo.pt">
     <label>Password</label>
     <input id="hsLoginPassword" type="password" autocomplete="current-password" placeholder="Password">
-    <button id="hsLoginButton" type="button" onclick="window.hsLogin()">ENTRAR</button>
-    <div id="hsLoginError"></div>
+    <button id="hsLoginButton" type="button" onclick="window.hsLoginDebug(event)">ENTRAR</button>
+    <div id="hsLoginError"></div><div id="hsLoginStatus" style="font-size:12px;color:#667085;margin-top:8px;font-weight:700;"></div>
   </div>
 </div>
 
@@ -2315,6 +2315,162 @@ function printDocumentList(){
 })();
 </script>
 
+
+
+<script id="happy-v37-login-diagnostico">
+(function(){
+  const SUPABASE_URL = 'https://ynlfxtghzuyshmxwwydw.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_f2HEahWlinclLJBVGEV6Cg_lvxycGGn';
+  const APP_ROW_ID = "happyscorpion";
+
+  function status(msg, isError){
+    const s = document.getElementById("hsLoginStatus");
+    const e = document.getElementById("hsLoginError");
+    if(s) {
+      s.textContent = msg || "";
+      s.style.color = isError ? "#d92332" : "#667085";
+    }
+    if(e && isError) e.textContent = msg || "";
+    if(e && !isError) e.textContent = "";
+  }
+
+  async function request(path, options){
+    options = options || {};
+    const headers = Object.assign({
+      "apikey": SUPABASE_KEY,
+      "Content-Type": "application/json"
+    }, options.headers || {});
+    if(options.token) headers["Authorization"] = "Bearer " + options.token;
+
+    const res = await fetch(SUPABASE_URL + path, {
+      method: options.method || "GET",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+
+    if(!res.ok){
+      const msg = data && (data.message || data.msg || data.error_description || data.error)
+        ? (data.message || data.msg || data.error_description || data.error)
+        : (text || ("HTTP " + res.status));
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  function payload(){
+    return {
+      movements: window.state?.movements || [],
+      incomeCats: window.state?.incomeCats || [],
+      expenseCats: window.state?.expenseCats || [],
+      works: window.state?.works || [],
+      suppliers: window.state?.suppliers || [],
+      clients: window.state?.clients || [],
+      rentalContracts: window.state?.rentalContracts || [],
+      year: window.state?.year,
+      month: window.state?.month
+    };
+  }
+
+  async function loadSharedData(token){
+    status("Login aceite. A carregar dados partilhados...");
+    try {
+      const rows = await request("/rest/v1/app_data?id=eq." + encodeURIComponent(APP_ROW_ID) + "&select=data", { token });
+      const row = Array.isArray(rows) ? rows[0] : null;
+
+      if(row && row.data && window.state){
+        const d = row.data;
+        if(Array.isArray(d.movements)) state.movements = d.movements;
+        if(Array.isArray(d.incomeCats)) state.incomeCats = d.incomeCats;
+        if(Array.isArray(d.expenseCats)) state.expenseCats = d.expenseCats;
+        if(Array.isArray(d.works)) state.works = d.works;
+        if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers;
+        if(Array.isArray(d.clients)) state.clients = d.clients;
+        if(Array.isArray(d.rentalContracts)) state.rentalContracts = d.rentalContracts;
+      } else {
+        await request("/rest/v1/app_data", {
+          method: "POST",
+          token,
+          headers: { "Prefer": "resolution=merge-duplicates" },
+          body: { id: APP_ROW_ID, data: payload(), updated_at: new Date().toISOString() }
+        });
+      }
+
+      document.body.classList.remove("auth-locked");
+      const login = document.getElementById("hsLoginScreen");
+      if(login) login.style.display = "none";
+
+      if(typeof syncYears === "function") syncYears();
+      if(typeof renderAll === "function") renderAll();
+
+      status("");
+    } catch(err){
+      status("Login feito, mas falta configurar a tabela app_data: " + err.message, true);
+      alert("Login feito, mas falta configurar a tabela app_data no Supabase. Erro: " + err.message);
+    }
+  }
+
+  window.hsLoginDebug = async function(ev){
+    if(ev && ev.preventDefault) ev.preventDefault();
+
+    const btn = document.getElementById("hsLoginButton");
+    const email = (document.getElementById("hsLoginEmail")?.value || "").trim();
+    const password = document.getElementById("hsLoginPassword")?.value || "";
+
+    if(!email || !password){
+      status("Introduza email e password.", true);
+      return false;
+    }
+
+    try {
+      if(btn) {
+        btn.disabled = true;
+        btn.textContent = "A VALIDAR...";
+      }
+
+      status("A contactar o Supabase...");
+      const auth = await request("/auth/v1/token?grant_type=password", {
+        method: "POST",
+        body: { email, password }
+      });
+
+      if(!auth || !auth.access_token){
+        status("O Supabase respondeu, mas não devolveu sessão.", true);
+        return false;
+      }
+
+      localStorage.setItem("hs_supabase_access_token", auth.access_token);
+      localStorage.setItem("hs_supabase_refresh_token", auth.refresh_token || "");
+
+      await loadSharedData(auth.access_token);
+      return false;
+    } catch(err){
+      status("Erro no login: " + err.message, true);
+      return false;
+    } finally {
+      if(btn) {
+        btn.disabled = false;
+        btn.textContent = "ENTRAR";
+      }
+    }
+  };
+
+  window.hsLogout = function(){
+    localStorage.removeItem("hs_supabase_access_token");
+    localStorage.removeItem("hs_supabase_refresh_token");
+    location.reload();
+  };
+
+  document.addEventListener("DOMContentLoaded", function(){
+    status("Pronto para login.");
+    const p = document.getElementById("hsLoginPassword");
+    if(p) p.addEventListener("keydown", function(e){ if(e.key === "Enter") window.hsLoginDebug(e); });
+  });
+})();
+</script>
 
 </body></html>`;
   const win=window.open('','_blank');
